@@ -2,12 +2,13 @@ from funasr import AutoModel
 from pathlib import Path
 
 class Emotion2VecModel:
-    def __init__(self, model_path: str | Path = "models/emotion2vec"):
+    def __init__(self, model_id: str = "iic/emotion2vec_plus_large"):
         self.model = AutoModel(
-            model=str(model_path),  # Convert Path to str if necessary
+            model=model_id,      # finetuned 9-sınıf SER modeli
             hub="ms",
-            disable_update=True
+            disable_update=True,
         )
+    # predict() ve _normalize_label() aynen kalıyor
     
     def predict(self, audio_path: str | Path) -> dict:
         result = self.model.generate(

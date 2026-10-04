@@ -1,0 +1,152 @@
+/* Voicemo theme — light, high-contrast, quiet chrome.
+   The only strong colour on screen is the detected emotion; everything else
+   stays neutral so the result reads at a glance. */
+
+* {
+    font-family: "Inter", "Segoe UI", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    color: #1B2330;
+}
+
+QMainWindow, QWidget#root {
+    background-color: #F3F4F6;
+}
+
+/* ---- Header ---- */
+QLabel#appTitle {
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: -0.3px;
+}
+QLabel#appSubtitle {
+    font-size: 13px;
+    color: #616B7A;
+}
+
+/* ---- Panels ---- */
+QFrame#card {
+    background-color: #FFFFFF;
+    border: 1px solid #E3E6EB;
+    border-radius: 18px;
+}
+
+QLabel#panelHeading {
+    font-size: 13px;
+    font-weight: 600;
+    color: #616B7A;
+}
+
+/* ---- Buttons ---- */
+QPushButton {
+    background-color: #FFFFFF;
+    border: 1px solid #D7DBE2;
+    border-radius: 11px;
+    padding: 11px 18px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #1B2330;
+}
+QPushButton:hover { background-color: #F1F3F6; }
+QPushButton:pressed { background-color: #E7EAEF; }
+QPushButton:disabled { color: #AEB4BE; border-color: #E8EBEF; }
+
+QPushButton#primary {
+    background-color: #1E6F64;
+    border: none;
+    color: #FFFFFF;
+}
+QPushButton#primary:hover { background-color: #23806F; }
+QPushButton#primary:pressed { background-color: #185A51; }
+QPushButton#primary:disabled { background-color: #BFD6D1; color: #EAF3F1; }
+
+QPushButton#recording {
+    background-color: #D64545;
+    border: none;
+    color: #FFFFFF;
+}
+QPushButton#recording:hover { background-color: #C33B3B; }
+QPushButton#recording:pressed { background-color: #AE3333; }
+
+/* ---- Emotion display ---- */
+QLabel#emotionEmoji { font-size: 88px; }
+QLabel#emotionLabel { font-size: 26px; font-weight: 800; }
+QLabel#emotionMeta  { font-size: 13px; color: #616B7A; }
+
+QProgressBar {
+    background-color: #EDEFF2;
+    border: none;
+    border-radius: 5px;
+    min-height: 10px;
+    max-height: 10px;
+    text-align: center;
+}
+QProgressBar::chunk {
+    border-radius: 5px;
+    background-color: #1E6F64;
+}
+
+/* ---- Transcript ---- */
+QTextEdit#transcript {
+    background-color: #FBFBFD;
+    border: 1px solid #E8EBEF;
+    border-radius: 12px;
+    padding: 14px;
+    font-size: 15px;
+    color: #1B2330;
+    selection-background-color: #CDE7E2;
+    selection-color: #10322E;
+}
+
+/* ---- Footer / misc ---- */
+QLabel#fileName { color: #616B7A; font-size: 13px; }
+QLabel#status   { color: #7A828F; font-size: 12px; }
+
+/* ---- Scrollbars ---- */
+QScrollBar:vertical { background: transparent; width: 10px; margin: 4px; }
+QScrollBar::handle:vertical {
+    background: #D3D8DF;
+    border-radius: 5px;
+    min-height: 30px;
+}
+QScrollBar::handle:vertical:hover { background: #BFC6CF; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
+
+/* ---- Control bar ---- */
+QFrame#controlBar {
+    background-color: #FFFFFF;
+    border: 1px solid #E3E6EB;
+    border-radius: 14px;
+}
+QFrame#divider { color: #E3E6EB; max-width: 1px; }
+
+QComboBox {
+    background-color: #FFFFFF;
+    border: 1px solid #D7DBE2;
+    border-radius: 9px;
+    padding: 7px 12px;
+    font-size: 13px;
+    min-width: 150px;
+}
+QComboBox:hover { background-color: #F1F3F6; }
+QComboBox::drop-down { border: none; width: 22px; }
+QComboBox QAbstractItemView {
+    background-color: #FFFFFF;
+    border: 1px solid #E3E6EB;
+    border-radius: 8px;
+    selection-background-color: #E7F1EF;
+    selection-color: #10322E;
+    outline: none;
+}
+
+/* ---- Timeline ---- */
+QScrollArea#timeline { background: transparent; border: none; }
+QScrollArea#timeline > QWidget > QWidget { background: transparent; }
+QScrollBar:horizontal {
+    background: transparent; height: 8px; margin: 0;
+}
+QScrollBar::handle:horizontal {
+    background: #D3D8DF; border-radius: 4px; min-width: 28px;
+}
+QScrollBar::handle:horizontal:hover { background: #BFC6CF; }
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: transparent; }

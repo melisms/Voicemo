@@ -1,41 +1,30 @@
+"""Application entry point.
+
+Run from the project root with:
+
+    python -m app.main
+
+The sys.path line also lets ``python app/main.py`` work directly, by putting
+the project root on the import path.
+"""
+
 import sys
+from pathlib import Path
 
-from PySide6.QtWidgets import (
-    QApplication,
-    QLabel,
-    QMainWindow,
-    QVBoxLayout,
-    QWidget,
-)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from PySide6.QtWidgets import QApplication
 
-class MainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
+# Re-exported so `from app.main import MainWindow` keeps working.
+from app.ui.main_window import MainWindow
 
-        self.setWindowTitle("Voicemo")
-        self.resize(900, 600)
-
-        title = QLabel("Voicemo")
-        title.setObjectName("title")
-
-        subtitle = QLabel(
-            "Speech emotion analysis for accessible online meetings"
-        )
-        subtitle.setObjectName("subtitle")
-
-        layout = QVBoxLayout()
-        layout.addWidget(title)
-        layout.addWidget(subtitle)
-
-        central_widget = QWidget()
-        central_widget.setLayout(layout)
-
-        self.setCentralWidget(central_widget)
+__all__ = ["MainWindow", "main"]
 
 
-def main():
+def main() -> None:
     app = QApplication(sys.argv)
+    app.setApplicationName("Voicemo")
+    app.setApplicationDisplayName("Voicemo")
 
     window = MainWindow()
     window.show()

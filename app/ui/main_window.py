@@ -13,6 +13,7 @@ restarting the app.
 from __future__ import annotations
 
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from PySide6.QtWidgets import (
@@ -37,6 +38,7 @@ from app.ui.live import LiveCapture, LiveWindowWorker
 from app.ui.worker import AnalysisWorker
 
 _AUDIO_FILTER = "Audio files (*.wav *.mp3 *.m4a *.flac *.ogg);;All files (*)"
+_ISTANBUL = timezone(timedelta(hours=3))  # UTC+3, no DST
 
 
 class MainWindow(QMainWindow):
@@ -285,7 +287,7 @@ class MainWindow(QMainWindow):
             confident=confidence >= 0.60,
         ))
 
-        stamp = self._elapsed()
+        stamp = self._timestamp()
         if transcript.strip():
             self._transcript.append_line(transcript, prefix=f"[{stamp}] ")
 
@@ -301,9 +303,12 @@ class MainWindow(QMainWindow):
     def _on_live_error(self, message: str) -> None:
         self._status.setText(f"Analysis error: {message}")
 
-    def _elapsed(self) -> str:
+    def _timestamp(self) -> str:
+        # elapsed since listening started + wall-clock Istanbul time (UTC+3)
         secs = int(time.monotonic() - self._live_started_at)
-        return f"{secs // 60:02d}:{secs % 60:02d}"
+        elapsed = f"{secs // 60:02d}:{secs % 60:02d}"
+        clock = datetime.now(_ISTANBUL).strftime("%H:%M:%S")
+        return f"{elapsed}  ·  {clock}"
 
     def _set_live_running(self, running: bool) -> None:
         self._live_btn.setText("Stop" if running else "Start listening")

@@ -1,67 +1,66 @@
 from funasr import AutoModel
 from pathlib import Path
-import wave
-import audioop
+
+from app.audio.vad import VoiceActivityDetector
+
 
 class Emotion2VecModel:
-    def __init__(self, model_id: str = "iic/emotion2vec_plus_large"):
+    def __init__(
+        self,
+        model_id: str = "iic/emotion2vec_plus_large",
+        vad_threshold: int = 50,
+    ):
         self.model = AutoModel(
-            model=model_id,      # finetuned 9-sınıf SER modeli
+            model=model_id,
             hub="ms",
             disable_update=True,
         )
-    # predict() ve _normalize_label() aynen kalıyor
-    
+
+        self.vad = VoiceActivityDetector(
+            threshold=vad_threshold
+        )
+
     def predict(self, audio_path: str | Path) -> dict:
-        
-        if not self.has_speech(audio_path):
+
+        if not self.vad.has_speech(audio_path):
             return {
                 "emotion": "unknown",
-                "confidence": 1.0
+                "confidence": 1.0,
             }
-        
+
         result = self.model.generate(
-            input=str(audio_path),  # Convert Path to str if necessary
+            input=str(audio_path),
             granularity="utterance",
             extract_embedding=False,
         )
-        
+
         prediction = result[0]
-        
+
         labels = prediction["labels"]
         scores = prediction["scores"]
-        index =  max(range(len(scores)), key=lambda i: scores[i])
-        
-        emotion = self._normalize_label(labels[index])
-        confidence = float(scores[index])
-        
-        if confidence < 0.60:
-            emotion = "unknown"
-        
+
+        index = max(
+            range(len(scores)),
+            key=lambda i: scores[i],
+        )
+
+        emotion = self._normalize_label(
+            labels[index]
+        )
+
+        confidence = float(
+            scores[index]
+        )
+
         return {
             "emotion": emotion,
-            "confidence": confidence
+            "confidence": confidence,
         }
-        
-    @staticmethod
-    def has_speech(audio_path: str | Path, threshold: int = 50) -> bool:
-        try:
-            with wave.open(str(audio_path), 'rb') as wf:
-                frames = wf.readframes(wf.getnframes())
-                if not frames:
-                    return False
-                rms_value = audioop.rms(
-                    frames,
-                    wf.getsampwidth()
-                )
-                print(f"RMS value: {rms_value}")
-                return rms_value >= threshold
-        except Exception:
-            return False
-    
+
     @staticmethod
     def _normalize_label(label: str) -> str:
-        emotion=label.split("/")[-1]
+        emotion = label.split("/")[-1]
+
         mapping = {
             "angry": "angry",
             "disgusted": "disgusted",
@@ -73,4 +72,8 @@ class Emotion2VecModel:
             "surprised": "surprised",
             "<unk>": "unknown",
         }
-        return mapping.get(emotion, "unknown")
+
+        return mapping.get(
+            emotion,
+            "unknown",
+        )

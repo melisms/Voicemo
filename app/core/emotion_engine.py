@@ -1,43 +1,80 @@
-from dataclasses import dataclass
+from collections import deque
 
-@dataclass
-class EmotionResult:
-    emotion: str
-    confidence: float
-    emoji: str
-    
 
 class EmotionEngine:
-    def __init__(self):
-        # Initialize any necessary resources or models here
-        pass
+    """
+    Stabilizes emotion predictions over multiple audio segments.
+    """
 
-    EMOTION_EMOJI_MAP = {
-        "happy": "😊",
-        "sad": "😢",
-        "angry": "😠",
-        "fearful": "😨",
-        "surprised": "😮",
-        "disgusted": "🤢",
-        "neutral": "😐",
-        "other": "❓",
-        "unknown": "❓",
-    }
-    
-    def process(self, emotion: str, confidence: float) -> EmotionResult:
-        """
-        Process the detected emotion and return an EmotionResult object.
+    def __init__(
+        self,
+        window_size: int = 5,
+        confidence_threshold: float = 0.60,
+    ):
+        self.window_size = window_size
+        self.confidence_threshold = confidence_threshold
 
-        Args:
-            emotion (str): The detected emotion.
-            confidence (float): The confidence score of the detected emotion.
+        self.history = deque(maxlen=window_size)
 
-        Returns:
-            EmotionResult: An object containing the processed emotion, confidence, and emoji.
-        """
-        emoji = self.EMOTION_EMOJI_MAP.get(emotion, "❓")
+    def update(
+        self,
+        emotion: str,
+        confidence: float,
+    ) -> dict:
+
+        # Unknown is not added as an emotional state.
+        if emotion == "unknown":
+            return {
+                "emotion": "unknown",
+                "confidence": confidence,
+            }
+
+        # Low-confidence predictions are ignored.
+        if confidence < self.confidence_threshold:
+            return {
+                "emotion": "unknown",
+                "confidence": confidence,
+            }
+
+        self.history.append({
+            "emotion": emotion,
+            "confidence": confidence,
+        })
+
+        if not self.history:
+            return {
+                "emotion": "unknown",
+                "confidence": 0.0,
+            }
         
-        if not emoji:
-            emoji = "❓"
-            
-        return EmotionResult(emotion=emotion, confidence=confidence, emoji=emoji)
+        scores = {}
+
+        for item in self.history:
+            emotion_name = item["emotion"]
+            score = item["confidence"]
+
+            scores[emotion_name] = (
+                scores.get(emotion_name, 0.0)
+                + score
+            )
+
+        final_emotion = max(
+            scores,
+            key=scores.get,
+        )
+
+        total = sum(scores.values())
+
+        final_confidence = (
+            scores[final_emotion] / total
+            if total > 0
+            else 0.0
+        )
+
+        return {
+            "emotion": final_emotion,
+            "confidence": final_confidence,
+        }
+
+    def reset(self):
+        self.history.clear()

@@ -12,6 +12,7 @@ restarting the app.
 
 from __future__ import annotations
 
+import sys
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -208,11 +209,18 @@ class MainWindow(QMainWindow):
         source = self._source.currentData()
 
         if source == "system" and not LiveCapture.system_available():
-            QMessageBox.information(
-                self, "Meeting audio",
-                "Capturing the meeting's audio needs PyAudioWPatch.\n\n"
-                "Install it, then try again:\n    pip install PyAudioWPatch",
-            )
+            if sys.platform == "win32":
+                msg = ("Capturing the meeting's audio needs PyAudioWPatch.\n\n"
+                       "Install it, then try again:\n    pip install PyAudioWPatch")
+            else:
+                msg = ("To capture the meeting's audio on macOS you need a virtual\n"
+                       "audio device that sends system sound back in as an input.\n\n"
+                       "1. Install BlackHole:   brew install blackhole-2ch\n"
+                       "2. In Audio MIDI Setup, create a Multi-Output Device that\n"
+                       "   includes both your speakers and BlackHole, and select it\n"
+                       "   as the system output.\n"
+                       "3. Start listening again and pick \"Meeting audio\".")
+            QMessageBox.information(self, "Meeting audio", msg)
             return
         if source == "mic" and not LiveCapture.mic_available():
             QMessageBox.information(

@@ -1,15 +1,3 @@
-"""The Voicemo application window — file analysis plus a live meeting mode.
-
-File mode:  [ Open audio file ] [ Analyze ]        → one-shot analysis of a file.
-Live mode:  [ Source ▾ ] [ ● Start listening ]     → continuous analysis of the
-            microphone or the meeting's audio (system/loopback), with a smoothed
-            current emotion, a streaming transcript, and an emotion timeline.
-
-Nothing blocks the UI: file analysis and each live window run on background
-threads. Live can be started and stopped as many times as you like without
-restarting the app.
-"""
-
 from __future__ import annotations
 
 import sys
@@ -33,11 +21,16 @@ from PySide6.QtWidgets import (
 )
 
 from app.config.settings import AUDIO_CHUNK_SECONDS
-from app.ui.components import EmotionCard, MiniBar, TimelinePanel, TranscriptPanel
+from app.core.emotion_engine import EmotionEngine
+from app.ui.components import (
+    EmotionCard,
+    MiniBar,
+    TimelinePanel,
+    TranscriptPanel,
+)
 from app.ui.emotion_style import DisplayResult, style_for
 from app.ui.live import LiveCapture, LiveWindowWorker
 from app.ui.worker import AnalysisWorker
-from app.core.emotion_engine import EmotionEngine
 
 
 _AUDIO_FILTER = (
@@ -57,7 +50,7 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(820, 600)
 
         # ==============================================================
-        # FILE MODE STATE
+        # FILE MODE
         # ==============================================================
 
         self._audio_path: Path | None = None
@@ -65,19 +58,20 @@ class MainWindow(QMainWindow):
         self._file_workers: list[AnalysisWorker] = []
 
         # ==============================================================
-        # EMOTION ENGINE
+        # EMOTION PROCESSING
         # ==============================================================
 
-        # EmotionEngine is responsible for temporal smoothing.
-        # It receives the raw Emotion2Vec prediction from each window
-        # and produces the stable emotion shown in the main emotion card.
+        # EmotionEngine:
+        # - handles confidence
+        # - handles unknown
+        # - prepares emotion result for smoothing
         self._emotion_engine = EmotionEngine(
             window_size=5,
             confidence_threshold=0.60,
         )
 
         # ==============================================================
-        # LIVE MODE STATE
+        # LIVE MODE
         # ==============================================================
 
         self._capture: LiveCapture | None = None
@@ -87,7 +81,9 @@ class MainWindow(QMainWindow):
         self._live_started_at = 0.0
 
         self._mini = MiniBar()
-        self._mini.restore_requested.connect(self._restore_from_mini)
+        self._mini.restore_requested.connect(
+            self._restore_from_mini
+        )
 
         # ==============================================================
         # UI
@@ -145,37 +141,42 @@ class MainWindow(QMainWindow):
         row.setContentsMargins(16, 12, 16, 12)
         row.setSpacing(12)
 
-        # --------------------------------------------------------------
-        # FILE CONTROLS
-        # --------------------------------------------------------------
-
+        # File controls
         self._open_btn = QPushButton("Open audio file")
-        self._open_btn.clicked.connect(self._on_open_file)
+        self._open_btn.clicked.connect(
+            self._on_open_file
+        )
 
         self._analyze_btn = QPushButton("Analyze")
         self._analyze_btn.setObjectName("primary")
         self._analyze_btn.setEnabled(False)
-        self._analyze_btn.clicked.connect(self._on_analyze)
+        self._analyze_btn.clicked.connect(
+            self._on_analyze
+        )
 
         self._file_label = QLabel("No file")
         self._file_label.setObjectName("fileName")
 
-        # --------------------------------------------------------------
-        # LIVE CONTROLS
-        # --------------------------------------------------------------
-
+        # Live controls
         self._source = QComboBox()
-
         self._source.addItem("Microphone", "mic")
-        self._source.addItem("Meeting audio (system)", "system")
+        self._source.addItem(
+            "Meeting audio (system)",
+            "system",
+        )
 
         self._live_btn = QPushButton("Start listening")
         self._live_btn.setObjectName("primary")
-        self._live_btn.clicked.connect(self._on_toggle_live)
+        self._live_btn.clicked.connect(
+            self._on_toggle_live
+        )
 
         row.addWidget(self._open_btn)
         row.addWidget(self._analyze_btn)
-        row.addWidget(self._file_label, stretch=1)
+        row.addWidget(
+            self._file_label,
+            stretch=1,
+        )
         row.addWidget(_divider())
         row.addWidget(QLabel("Live:"))
         row.addWidget(self._source)
@@ -190,8 +191,17 @@ class MainWindow(QMainWindow):
         body = QGridLayout()
         body.setSpacing(16)
 
-        body.addWidget(self._emotion_card, 0, 0)
-        body.addWidget(self._transcript, 0, 1)
+        body.addWidget(
+            self._emotion_card,
+            0,
+            0,
+        )
+
+        body.addWidget(
+            self._transcript,
+            0,
+            1,
+        )
 
         body.setColumnStretch(0, 4)
         body.setColumnStretch(1, 6)
@@ -213,7 +223,10 @@ class MainWindow(QMainWindow):
         if path:
             self._audio_path = Path(path)
 
-            self._file_label.setText(self._audio_path.name)
+            self._file_label.setText(
+                self._audio_path.name
+            )
+
             self._analyze_btn.setEnabled(True)
 
             self._status.setText(
@@ -221,14 +234,14 @@ class MainWindow(QMainWindow):
             )
 
     def _on_analyze(self) -> None:
-        if self._audio_path is None or self._capture is not None:
+        if (
+            self._audio_path is None
+            or self._capture is not None
+        ):
             return
 
         self._run_id += 1
         run_id = self._run_id
-
-        # Reset emotion smoothing before a new file analysis.
-        self._emotion_engine.reset()
 
         self._emotion_card.show_waiting()
         self._transcript.clear()
@@ -245,10 +258,17 @@ class MainWindow(QMainWindow):
             self._audio_path,
         )
 
-        worker.succeeded.connect(self._on_file_result)
-        worker.failed.connect(self._on_file_error)
+        worker.succeeded.connect(
+            self._on_file_result
+        )
+
+        worker.failed.connect(
+            self._on_file_error
+        )
+
         worker.finished.connect(
-            lambda w=worker: self._cleanup_file_worker(w)
+            lambda w=worker:
+            self._cleanup_file_worker(w)
         )
 
         self._file_workers.append(worker)
@@ -263,7 +283,9 @@ class MainWindow(QMainWindow):
             return
 
         self._emotion_card.show_result(result)
-        self._transcript.set_text(result.transcript)
+        self._transcript.set_text(
+            result.transcript
+        )
 
         self._status.setText(
             f"Done — {result.label.lower()}"
@@ -323,26 +345,30 @@ class MainWindow(QMainWindow):
         source = self._source.currentData()
 
         # --------------------------------------------------------------
-        # SYSTEM AUDIO CHECK
+        # SYSTEM AUDIO
         # --------------------------------------------------------------
 
-        if source == "system" and not LiveCapture.system_available():
+        if (
+            source == "system"
+            and not LiveCapture.system_available()
+        ):
             if sys.platform == "win32":
                 msg = (
-                    "Capturing the meeting's audio needs PyAudioWPatch.\n\n"
+                    "Capturing the meeting's audio needs "
+                    "PyAudioWPatch.\n\n"
                     "Install it, then try again:\n"
                     "    pip install PyAudioWPatch"
                 )
             else:
                 msg = (
-                    "To capture the meeting's audio on macOS you need a "
-                    "virtual audio device that sends system sound back in "
-                    "as an input.\n\n"
+                    "To capture the meeting's audio on macOS "
+                    "you need a virtual audio device that sends "
+                    "system sound back in as an input.\n\n"
                     "1. Install BlackHole:\n"
                     "   brew install blackhole-2ch\n\n"
-                    "2. In Audio MIDI Setup, create a Multi-Output Device "
-                    "that includes both your speakers and BlackHole, and "
-                    "select it as the system output.\n\n"
+                    "2. In Audio MIDI Setup, create a Multi-Output "
+                    "Device that includes both your speakers and "
+                    "BlackHole, and select it as the system output.\n\n"
                     "3. Start listening again and pick "
                     "\"Meeting audio\"."
                 )
@@ -355,10 +381,13 @@ class MainWindow(QMainWindow):
             return
 
         # --------------------------------------------------------------
-        # MICROPHONE CHECK
+        # MICROPHONE
         # --------------------------------------------------------------
 
-        if source == "mic" and not LiveCapture.mic_available():
+        if (
+            source == "mic"
+            and not LiveCapture.mic_available()
+        ):
             QMessageBox.information(
                 self,
                 "Microphone",
@@ -368,11 +397,9 @@ class MainWindow(QMainWindow):
             return
 
         # ==============================================================
-        # FRESH LIVE SESSION
+        # RESET SESSION STATE
         # ==============================================================
 
-        # IMPORTANT:
-        # Clear emotion history whenever a new live session starts.
         self._emotion_engine.reset()
 
         self._pending_window = None
@@ -385,9 +412,9 @@ class MainWindow(QMainWindow):
 
         self._live_started_at = time.monotonic()
 
-        # --------------------------------------------------------------
-        # CAPTURE
-        # --------------------------------------------------------------
+        # ==============================================================
+        # START CAPTURE
+        # ==============================================================
 
         self._capture = LiveCapture(
             source=source,
@@ -428,7 +455,7 @@ class MainWindow(QMainWindow):
             self._capture.stop()
             self._capture = None
 
-        # Clear smoothing state when live mode ends.
+        # Reset both processing layers.
         self._emotion_engine.reset()
 
         self._set_live_running(False)
@@ -442,17 +469,13 @@ class MainWindow(QMainWindow):
         )
 
     # ==================================================================
-    # LIVE WINDOW PROCESSING
+    # WINDOW PROCESSING
     # ==================================================================
 
     def _on_window(self, audio) -> None:
-        """
-        Receive one audio window from LiveCapture.
-
-        Only one LiveWindowWorker runs at a time. If another audio window
-        arrives while the current one is being processed, keep only the
-        latest window.
-        """
+        # Single-flight:
+        # if the previous window is still being analysed,
+        # keep only the newest window.
 
         if self._live_worker is not None:
             self._pending_window = audio
@@ -485,7 +508,6 @@ class MainWindow(QMainWindow):
 
         self._live_worker = None
 
-        # Process the newest waiting window.
         if (
             self._pending_window is not None
             and self._capture is not None
@@ -493,29 +515,28 @@ class MainWindow(QMainWindow):
             pending = self._pending_window
             self._pending_window = None
 
-            self._start_window_worker(pending)
+            self._start_window_worker(
+                pending
+            )
 
     # ==================================================================
-    # EMOTION + TRANSCRIPT
+    # EMOTION PROCESSING
     # ==================================================================
 
     def _on_segment(self, seg: dict) -> None:
         """
-        Handle one processed live audio segment.
+        Process one live analysis result.
 
-        seg is expected to contain:
+        LiveWindowWorker returns:
 
             {
+                "transcription": str,
                 "emotion": str,
-                "confidence": float,
-                "transcription": str
+                "confidence": float
             }
-
-        Raw Emotion2Vec output is passed through EmotionEngine before
-        being displayed as the current emotion.
         """
 
-        # A worker may finish after the user has pressed Stop.
+        # Ignore late results after stopping live mode.
         if self._capture is None:
             return
 
@@ -540,49 +561,38 @@ class MainWindow(QMainWindow):
             "",
         )
 
-        # Normalize invalid values.
+        # Safety normalization.
         if not emotion:
             emotion = "unknown"
 
-        if confidence < 0.0:
-            confidence = 0.0
-        elif confidence > 1.0:
-            confidence = 1.0
-
-        # ==============================================================
-        # EMOTION ENGINE
-        # ==============================================================
-
-        stable = self._emotion_engine.update(
+        confidence = max(
+            0.0,
+            min(1.0, confidence),
+        )
+        
+        processed = self._emotion_engine.update(
             emotion=emotion,
             confidence=confidence,
         )
 
-        stable_emotion = stable.get(
+        stable_emotion = processed.get(
             "emotion",
             "unknown",
         )
 
         stable_confidence = float(
-            stable.get(
+            processed.get(
                 "confidence",
                 0.0,
             )
         )
-
-        # --------------------------------------------------------------
-        # NO SPEECH / UNKNOWN
-        # --------------------------------------------------------------
-
-        if emotion == "unknown":
-            stable_emotion = "unknown"
-            stable_confidence = 0.0
-
         # ==============================================================
-        # HERO / MAIN EMOTION CARD
+        # EMOTION CARD
         # ==============================================================
 
-        hero = style_for(stable_emotion)
+        hero = style_for(
+            stable_emotion
+        )
 
         self._emotion_card.show_result(
             DisplayResult(
@@ -593,8 +603,8 @@ class MainWindow(QMainWindow):
                 color=hero.color,
                 label=hero.label,
                 confident=(
-                    stable_confidence >= 0.60
-                    and stable_emotion != "unknown"
+                    stable_emotion != "unknown"
+                    and stable_confidence >= 0.60
                 ),
             )
         )
@@ -614,26 +624,28 @@ class MainWindow(QMainWindow):
         # ==============================================================
         # TIMELINE
         # ==============================================================
+        if emotion != "unknown":
+            raw_style = style_for(
+                emotion
+            )
 
-        raw_style = style_for(emotion)
+            self._timeline.add(
+                raw_style.emoji,
+                raw_style.label,
+                raw_style.color,
+                stamp,
+            )
 
-        self._timeline.add(
-            raw_style.emoji,
-            raw_style.label,
-            raw_style.color,
-            stamp,
-        )
+            # ==============================================================
+            # MINI BAR
+            # ==============================================================
 
-        # ==============================================================
-        # MINI BAR
-        # ==============================================================
-
-        self._mini.add(
-            raw_style.emoji,
-            raw_style.label,
-            raw_style.color,
-            stamp,
-        )
+            self._mini.add(
+                raw_style.emoji,
+                raw_style.label,
+                raw_style.color,
+                stamp,
+            )
 
         # ==============================================================
         # STATUS
@@ -645,7 +657,7 @@ class MainWindow(QMainWindow):
             )
         else:
             self._status.setText(
-                f"Listening… current mood: "
+                "Listening… current mood: "
                 f"{hero.label.lower()}"
             )
 
@@ -682,7 +694,6 @@ class MainWindow(QMainWindow):
     # ==================================================================
 
     def _timestamp(self) -> str:
-        # Elapsed time since listening started.
         secs = int(
             time.monotonic()
             - self._live_started_at
@@ -693,7 +704,6 @@ class MainWindow(QMainWindow):
             f"{secs % 60:02d}"
         )
 
-        # Istanbul wall-clock time, UTC+3.
         clock = datetime.now(
             _ISTANBUL
         ).strftime("%H:%M:%S")
@@ -721,7 +731,6 @@ class MainWindow(QMainWindow):
         self._live_btn.style().unpolish(
             self._live_btn
         )
-
         self._live_btn.style().polish(
             self._live_btn
         )
@@ -740,24 +749,20 @@ class MainWindow(QMainWindow):
         )
 
     # ==================================================================
-    # WINDOW / MINI BAR
+    # WINDOW EVENTS
     # ==================================================================
 
     def changeEvent(
         self,
-        event,
+        event: QEvent,
     ) -> None:
         if event.type() == QEvent.WindowStateChange:
-
-            # When a live session is active and the main window is
-            # minimized, show the floating mini bar.
             if (
                 self.isMinimized()
                 and self._capture is not None
             ):
                 self._mini.dock_bottom()
                 self._mini.show()
-
             else:
                 self._mini.hide()
 
@@ -774,11 +779,7 @@ class MainWindow(QMainWindow):
     # CLOSE
     # ==================================================================
 
-    def closeEvent(
-        self,
-        event,
-    ) -> None:
-        # Stop capture cleanly before closing the application.
+    def closeEvent(self, event) -> None:
         if self._capture is not None:
             self._capture.stop()
             self._capture = None
@@ -791,7 +792,7 @@ class MainWindow(QMainWindow):
 
 
 # ======================================================================
-# SMALL HELPERS
+# HELPERS
 # ======================================================================
 
 def _divider() -> QFrame:
@@ -803,5 +804,4 @@ def _divider() -> QFrame:
 
 def _load_stylesheet() -> str:
     from app.ui.theme import load_stylesheet
-
     return load_stylesheet()

@@ -1,28 +1,34 @@
 """Live audio capture and per-window analysis for the meeting mode.
 
-Capture runs on a background thread and emits fixed-length windows of 16 kHz
-mono audio. Two sources:
+Cross-platform capture, chosen by source and OS:
 
-  * "mic"    — the default microphone (via sounddevice).
-  * "system" — what you hear, i.e. the meeting's other participants, captured
-               with WASAPI loopback (via PyAudioWPatch). Plain sounddevice
-               can't do this on Windows, so this source needs PyAudioWPatch.
+  * "mic"            — default microphone (sounddevice), on Windows and macOS.
+  * "system" on Win  — WASAPI loopback (PyAudioWPatch): captures what you hear.
+  * "system" on mac  — a virtual loopback input device (e.g. BlackHole) read via
+                       sounddevice; macOS can't capture system output directly,
+                       so the user installs BlackHole and routes audio to it.
 
-Each window is analysed off the UI thread, deliberately without ffmpeg: Whisper
-is fed the audio as a numpy array directly (no file, no ffmpeg), and emotion2vec
-reads a short temp WAV via torchaudio (also no ffmpeg). That keeps the live mode
-working regardless of whether ffmpeg is on PATH.
+PyAudioWPatch is Windows-only and is imported only on Windows, so nothing breaks
+on macOS. Each window is analysed without ffmpeg: Whisper is fed a numpy array
+directly, and emotion2vec reads a short temp WAV via torchaudio.
 """
 
 from __future__ import annotations
 
 import os
+import sys
 import tempfile
 
 import numpy as np
 from PySide6.QtCore import QThread, Signal
 
 TARGET_SR = 16000
+
+# Names that usually mean "captures what you hear" (virtual loopback devices).
+_LOOPBACK_HINTS = (
+    "blackhole", "loopback", "soundflower", "stereo mix",
+    "vb-audio", "vb-cable", "voicemeeter",
+)
 
 
 def resample_to_16k(mono: np.ndarray, sr: int) -> np.ndarray:
@@ -34,6 +40,21 @@ def resample_to_16k(mono: np.ndarray, sr: int) -> np.ndarray:
     x_old = np.linspace(0.0, 1.0, len(mono), endpoint=False)
     x_new = np.linspace(0.0, 1.0, n, endpoint=False)
     return np.interp(x_new, x_old, mono).astype(np.float32)
+
+
+def _is_loopback_name(name: str) -> bool:
+    name = (name or "").lower()
+    return any(hint in name for hint in _LOOPBACK_HINTS)
+
+
+def _find_loopback_device():
+    """Index of an input device that looks like a virtual loopback, or None."""
+    import sounddevice as sd
+
+    for index, dev in enumerate(sd.query_devices()):
+        if dev["max_input_channels"] > 0 and _is_loopback_name(dev["name"]):
+            return index
+    return None
 
 
 class LiveCapture(QThread):
@@ -58,9 +79,15 @@ class LiveCapture(QThread):
 
     @staticmethod
     def system_available() -> bool:
+        if sys.platform == "win32":
+            try:
+                import pyaudiowpatch  # noqa: F401
+                return True
+            except Exception:
+                return False
+        # macOS / Linux: need a virtual loopback input device (e.g. BlackHole)
         try:
-            import pyaudiowpatch  # noqa: F401
-            return True
+            return _find_loopback_device() is not None
         except Exception:
             return False
 
@@ -72,31 +99,57 @@ class LiveCapture(QThread):
         self._running = True
         try:
             if self.source == "system":
-                self._run_system()
+                if sys.platform == "win32":
+                    self._run_system_windows()
+                else:
+                    self._run_system_device()
             else:
                 self._run_mic()
         except Exception as exc:  # noqa: BLE001 — reported to the UI
             self.error.emit(f"{type(exc).__name__}: {exc}")
 
-    # ---- microphone (sounddevice) ----
+    # ---- microphone (sounddevice, all platforms) ----
     def _run_mic(self) -> None:
         import sounddevice as sd
 
-        block = int(TARGET_SR * 0.1)
-        win = int(TARGET_SR * self.window_seconds)
-        buf = np.empty(0, dtype=np.float32)
+        self._stream_from_device(sd, device=None, sr=TARGET_SR, channels=1)
 
-        with sd.InputStream(samplerate=TARGET_SR, channels=1,
+    # ---- system audio on macOS/Linux: a virtual loopback input device ----
+    def _run_system_device(self) -> None:
+        import sounddevice as sd
+
+        device = _find_loopback_device()
+        if device is None:
+            self.error.emit(
+                "No virtual audio device found. On macOS, install BlackHole "
+                "(brew install blackhole-2ch) and route system / meeting audio "
+                "to it, then pick it up here."
+            )
+            return
+        info = sd.query_devices(device)
+        sr = int(info["default_samplerate"]) or 48000
+        channels = min(2, int(info["max_input_channels"])) or 1
+        self._stream_from_device(sd, device=device, sr=sr, channels=channels)
+
+    def _stream_from_device(self, sd, device, sr: int, channels: int) -> None:
+        block = max(1, int(sr * 0.1))
+        win = int(sr * self.window_seconds)
+        buf = np.empty(0, dtype=np.float32)
+        with sd.InputStream(samplerate=sr, device=device, channels=channels,
                             dtype="float32", blocksize=block) as stream:
             while self._running:
                 data, _ = stream.read(block)
-                buf = np.concatenate([buf, data.reshape(-1)])
+                if data.ndim > 1 and data.shape[1] > 1:
+                    mono = data.mean(axis=1)
+                else:
+                    mono = data.reshape(-1)
+                buf = np.concatenate([buf, mono])
                 while len(buf) >= win:
-                    self.window_ready.emit(buf[:win].copy())
+                    self.window_ready.emit(resample_to_16k(buf[:win].copy(), sr))
                     buf = buf[win:]
 
-    # ---- system / meeting audio (PyAudioWPatch WASAPI loopback) ----
-    def _run_system(self) -> None:
+    # ---- system audio on Windows: WASAPI loopback (PyAudioWPatch) ----
+    def _run_system_windows(self) -> None:
         import pyaudiowpatch as pyaudio
 
         with pyaudio.PyAudio() as p:

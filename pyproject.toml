@@ -15,7 +15,9 @@ dependencies = [
     "funasr",
     "modelscope",
     "sounddevice",
-    "numpy"
+    "soundfile",
+    "numpy",
+    "PyAudioWPatch; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]

@@ -2,12 +2,10 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
   pull_request:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   test:
@@ -24,20 +22,25 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: "pip"
 
-      - name: Install Qt system dependencies
+      - name: Install Qt/Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0
+          sudo apt-get install -y \
+            libegl1 \
+            libgl1 \
+            libxkbcommon-x11-0 \
+            libxcb-cursor0
 
       - name: Upgrade pip
-        run: python -m pip install --upgrade pip
+        run: python -m pip install --upgrade pip setuptools wheel
 
-      - name: Install project
+      - name: Install project and test dependencies
         run: python -m pip install -e ".[dev]"
 
       - name: Check Python syntax
         run: python -m compileall -q app tests
 
       - name: Run tests
-        run: python -m pytest -v
+        run: python -m pytest tests -v

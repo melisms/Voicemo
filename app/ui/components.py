@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
@@ -234,13 +236,22 @@ class MiniBar(QWidget, _PillStrip):
     restore_requested = Signal()
 
     def __init__(self) -> None:
-        super().__init__(
-            None,
-            Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool,
-        )
+        flags = (Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+                 | Qt.WindowDoesNotAcceptFocus)
+        # Tool keeps it out of the taskbar, but on macOS a Tool window hides
+        # whenever the app is inactive — exactly what we must avoid here.
+        if sys.platform != "darwin":
+            flags |= Qt.Tool
+        super().__init__(None, flags)
         self.setObjectName("miniBarWindow")
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self._drag = None
+
+        # some window managers push a frameless window behind others on a
+        # focus change; re-assert top every so often while it's visible.
+        self._raise_timer = QTimer(self)
+        self._raise_timer.setInterval(1200)
+        self._raise_timer.timeout.connect(self._keep_on_top)
 
         card = QFrame()
         card.setObjectName("miniBar")
@@ -292,6 +303,19 @@ class MiniBar(QWidget, _PillStrip):
         w = min(820, screen.width() - 40)
         self.resize(w, 58)
         self.move(screen.center().x() - w // 2, screen.bottom() - 58 - 16)
+
+    def _keep_on_top(self) -> None:
+        if self.isVisible():
+            self.raise_()
+
+    def showEvent(self, e) -> None:
+        self._raise_timer.start()
+        self.raise_()
+        super().showEvent(e)
+
+    def hideEvent(self, e) -> None:
+        self._raise_timer.stop()
+        super().hideEvent(e)
 
     def mousePressEvent(self, e) -> None:
         if e.button() == Qt.LeftButton:

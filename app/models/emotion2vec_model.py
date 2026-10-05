@@ -1,5 +1,7 @@
 from funasr import AutoModel
 from pathlib import Path
+import wave
+import audioop
 
 class Emotion2VecModel:
     def __init__(self, model_id: str = "iic/emotion2vec_plus_large"):
@@ -11,6 +13,13 @@ class Emotion2VecModel:
     # predict() ve _normalize_label() aynen kalıyor
     
     def predict(self, audio_path: str | Path) -> dict:
+        
+        if not self.has_speech(audio_path):
+            return {
+                "emotion": "unknown",
+                "confidence": 1.0
+            }
+        
         result = self.model.generate(
             input=str(audio_path),  # Convert Path to str if necessary
             granularity="utterance",
@@ -23,10 +32,32 @@ class Emotion2VecModel:
         scores = prediction["scores"]
         index =  max(range(len(scores)), key=lambda i: scores[i])
         
+        emotion = self._normalize_label(labels[index])
+        confidence = float(scores[index])
+        
+        if confidence < 0.60:
+            emotion = "unknown"
+        
         return {
-            "emotion": self._normalize_label(labels[index]),
-            "confidence": float(scores[index])
+            "emotion": emotion,
+            "confidence": confidence
         }
+        
+    @staticmethod
+    def has_speech(audio_path: str | Path, threshold: int = 50) -> bool:
+        try:
+            with wave.open(str(audio_path), 'rb') as wf:
+                frames = wf.readframes(wf.getnframes())
+                if not frames:
+                    return False
+                rms_value = audioop.rms(
+                    frames,
+                    wf.getsampwidth()
+                )
+                print(f"RMS value: {rms_value}")
+                return rms_value >= threshold
+        except Exception:
+            return False
     
     @staticmethod
     def _normalize_label(label: str) -> str:

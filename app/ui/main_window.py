@@ -17,6 +17,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from PySide6.QtCore import QEvent
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
@@ -33,7 +34,7 @@ from PySide6.QtWidgets import (
 
 from app.config.settings import AUDIO_CHUNK_SECONDS
 from app.core.aggregator import EmotionAggregator
-from app.ui.components import EmotionCard, TimelinePanel, TranscriptPanel
+from app.ui.components import EmotionCard, MiniBar, TimelinePanel, TranscriptPanel
 from app.ui.emotion_style import DisplayResult, style_for
 from app.ui.live import LiveCapture, LiveWindowWorker
 from app.ui.worker import AnalysisWorker
@@ -60,6 +61,8 @@ class MainWindow(QMainWindow):
         self._pending_window = None
         self._aggregator = EmotionAggregator(window_size=5)
         self._live_started_at = 0.0
+        self._mini = MiniBar()
+        self._mini.restore_requested.connect(self._restore_from_mini)
 
         self._build_ui()
         self.setStyleSheet(_load_stylesheet())
@@ -233,6 +236,7 @@ class MainWindow(QMainWindow):
         self._aggregator = EmotionAggregator(window_size=5)
         self._pending_window = None
         self._timeline.clear()
+        self._mini.reset()
         self._transcript.clear()
         self._emotion_card.show_listening()
         self._live_started_at = time.monotonic()
@@ -252,6 +256,7 @@ class MainWindow(QMainWindow):
             self._capture.stop()
             self._capture = None
         self._set_live_running(False)
+        self._mini.hide()
         self._emotion_card.reset()
         self._status.setText("Stopped listening")
 
@@ -299,8 +304,9 @@ class MainWindow(QMainWindow):
         if transcript.strip():
             self._transcript.append_line(transcript, prefix=f"[{stamp}] ")
 
-        raw = style_for(emotion)  # timeline shows the per-window emotion
+        raw = style_for(emotion)  # the per-window (instantaneous) emotion
         self._timeline.add(raw.emoji, raw.label, raw.color, stamp)
+        self._mini.add(raw.emoji, raw.label, raw.color, stamp)
         self._status.setText(f"Listening… current mood: {hero.label.lower()}")
 
     def _on_capture_error(self, message: str) -> None:
@@ -327,9 +333,26 @@ class MainWindow(QMainWindow):
         self._open_btn.setEnabled(not running)
         self._analyze_btn.setEnabled(not running and self._audio_path is not None)
 
+    def changeEvent(self, event) -> None:
+        if event.type() == QEvent.WindowStateChange:
+            # while a live session runs, minimising pops the floating mini bar
+            if self.isMinimized() and self._capture is not None:
+                self._mini.dock_bottom()
+                self._mini.show()
+            else:
+                self._mini.hide()
+        super().changeEvent(event)
+
+    def _restore_from_mini(self) -> None:
+        self._mini.hide()
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
     def closeEvent(self, event) -> None:  # stop capture cleanly on window close
         if self._capture is not None:
             self._capture.stop()
+        self._mini.close()
         super().closeEvent(event)
 
 

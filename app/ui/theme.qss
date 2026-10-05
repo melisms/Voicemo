@@ -150,3 +150,22 @@ QScrollBar::handle:horizontal {
 QScrollBar::handle:horizontal:hover { background: #BFC6CF; }
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
 QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: transparent; }
+
+/* ---- Floating mini bar ---- */
+QFrame#miniBar {
+    background-color: #FFFFFF;
+    border: 1px solid #D7DBE2;
+    border-radius: 16px;
+}
+QLabel#miniEmoji { font-size: 26px; }
+QLabel#miniLabel { font-size: 15px; font-weight: 700; }
+QFrame#miniDivider { color: #E3E6EB; max-width: 1px; }
+QPushButton#miniRestore {
+    background-color: #F1F3F6;
+    border: 1px solid #D7DBE2;
+    border-radius: 16px;      /* circular */
+    font-size: 15px;
+    color: #5B6472;
+}
+QPushButton#miniRestore:hover { background-color: #E7EAEF; }
+QPushButton#miniRestore:pressed { background-color: #DDE1E7; }

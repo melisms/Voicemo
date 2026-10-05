@@ -1,9 +1,10 @@
-"""Runs the backend pipeline off the GUI thread.
+"""Runs file analysis off the GUI thread — without ffmpeg.
 
-Each run carries a ``run_id``; the window ignores any result whose id is not the
-latest, so a late-arriving result can never overwrite a newer one. The backend
-pipeline is created once, on the worker thread, and cached so the models load
-only a single time.
+The audio file is loaded into a numpy array with soundfile (no ffmpeg), then
+analysed exactly like a live window: Whisper runs on the array directly, and
+emotion2vec reads a short temp WAV via torchaudio. Each run carries a run_id so
+only the latest result is shown. (This bypasses the backend's VoicemoPipeline,
+whose path-based Whisper call is what needed ffmpeg.)
 """
 
 from __future__ import annotations
@@ -14,36 +15,37 @@ from PySide6.QtCore import QThread, Signal
 
 from app.core.confidence import is_confident
 from app.ui.emotion_style import DisplayResult, style_for
+from app.ui.live import LiveAnalyzer, resample_to_16k
 
 
 class AnalysisWorker(QThread):
     succeeded = Signal(int, object)   # run_id, DisplayResult
     failed = Signal(int, str)         # run_id, error message
 
-    _pipeline = None  # shared across runs so the models load only once
-
     def __init__(self, run_id: int, audio_path: str | Path) -> None:
         super().__init__()
         self._run_id = run_id
         self._audio_path = str(audio_path)
 
-    def run(self) -> None:  # executed on the worker thread
+    def run(self) -> None:
         try:
-            pipeline = self._get_pipeline()
-            raw = pipeline.process(self._audio_path)
+            audio = self._load_audio(self._audio_path)
+            raw = LiveAnalyzer.analyze(audio)
             result = self._to_display(raw)
         except Exception as exc:  # noqa: BLE001 — surfaced to the UI
             self.failed.emit(self._run_id, self._friendly_error(exc))
         else:
             self.succeeded.emit(self._run_id, result)
 
-    @classmethod
-    def _get_pipeline(cls):
-        if cls._pipeline is None:
-            from app.inference.pipeline import VoicemoPipeline
+    @staticmethod
+    def _load_audio(path: str):
+        """Load any WAV/FLAC/OGG (and MP3 on recent libsndfile) as 16 kHz mono."""
+        import soundfile as sf
 
-            cls._pipeline = VoicemoPipeline()
-        return cls._pipeline
+        audio, sr = sf.read(path, dtype="float32", always_2d=False)
+        if getattr(audio, "ndim", 1) > 1:   # stereo -> mono
+            audio = audio.mean(axis=1)
+        return resample_to_16k(audio, sr)
 
     @staticmethod
     def _to_display(raw: dict) -> DisplayResult:
@@ -63,14 +65,8 @@ class AnalysisWorker(QThread):
     @staticmethod
     def _friendly_error(exc: Exception) -> str:
         message = str(exc)
-        looks_like_ffmpeg = (
-            isinstance(exc, FileNotFoundError)
-            or "WinError 2" in message
-            or "ffmpeg" in message.lower()
-        )
-        if looks_like_ffmpeg:
-            return (
-                "Couldn't read the audio — ffmpeg doesn't seem to be on your "
-                "PATH. Install ffmpeg and restart the app, then try again."
-            )
+        low = message.lower()
+        if "format not recognised" in low or "error opening" in low:
+            return ("Couldn't read this audio format. Try a WAV, FLAC or OGG "
+                    "file (or convert it first).")
         return message

@@ -3,7 +3,8 @@ from collections import deque
 
 class EmotionEngine:
     """
-    Stabilizes emotion predictions over multiple audio segments.
+    Filters and stabilizes emotion predictions over multiple
+    audio segments.
     """
 
     def __init__(
@@ -13,7 +14,6 @@ class EmotionEngine:
     ):
         self.window_size = window_size
         self.confidence_threshold = confidence_threshold
-
         self.history = deque(maxlen=window_size)
 
     def update(
@@ -22,20 +22,29 @@ class EmotionEngine:
         confidence: float,
     ) -> dict:
 
-        # Unknown is not added as an emotional state.
+        # --------------------------------------------------------------
+        # NO SPEECH / UNKNOWN
+        # --------------------------------------------------------------
         if emotion == "unknown":
+            self.history.clear()
+
             return {
                 "emotion": "unknown",
-                "confidence": confidence,
+                "confidence": 0.0,
             }
 
-        # Low-confidence predictions are ignored.
+        # --------------------------------------------------------------
+        # LOW CONFIDENCE
+        # --------------------------------------------------------------
         if confidence < self.confidence_threshold:
             return {
                 "emotion": "unknown",
-                "confidence": confidence,
+                "confidence": 0.0,
             }
 
+        # --------------------------------------------------------------
+        # ADD VALID PREDICTION
+        # --------------------------------------------------------------
         self.history.append({
             "emotion": emotion,
             "confidence": confidence,
@@ -46,7 +55,10 @@ class EmotionEngine:
                 "emotion": "unknown",
                 "confidence": 0.0,
             }
-        
+
+        # --------------------------------------------------------------
+        # CONFIDENCE-WEIGHTED TEMPORAL SMOOTHING
+        # --------------------------------------------------------------
         scores = {}
 
         for item in self.history:
@@ -76,5 +88,5 @@ class EmotionEngine:
             "confidence": final_confidence,
         }
 
-    def reset(self):
+    def reset(self) -> None:
         self.history.clear()

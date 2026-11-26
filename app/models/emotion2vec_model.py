@@ -1,27 +1,37 @@
-from funasr import AutoModel
+
 from pathlib import Path
 
+from funasr import AutoModel
+
 from app.audio.vad import VoiceActivityDetector
+from app.services.model_manager import ModelManager
 
 
 class Emotion2VecModel:
     def __init__(
         self,
-        model_id: str = "iic/emotion2vec_plus_large",
         vad_threshold: int = 50,
+        device: str | None = None,
     ):
-        self.model = AutoModel(
-            model=model_id,
-            hub="ms",
-            disable_update=True,
-        )
+        self.model_manager = ModelManager()
+
+        model_path = self.model_manager.get_emotion2vec_model_path()
+
+        model_kwargs = {
+            "model": str(model_path),
+            "disable_update": True,
+        }
+
+        if device is not None:
+            model_kwargs["device"] = device
+
+        self.model = AutoModel(**model_kwargs)
 
         self.vad = VoiceActivityDetector(
             threshold=vad_threshold
         )
 
     def predict(self, audio_path: str | Path) -> dict:
-
         if not self.vad.has_speech(audio_path):
             return {
                 "emotion": "unknown",
@@ -44,13 +54,8 @@ class Emotion2VecModel:
             key=lambda i: scores[i],
         )
 
-        emotion = self._normalize_label(
-            labels[index]
-        )
-
-        confidence = float(
-            scores[index]
-        )
+        emotion = self._normalize_label(labels[index])
+        confidence = float(scores[index])
 
         return {
             "emotion": emotion,
@@ -73,7 +78,4 @@ class Emotion2VecModel:
             "<unk>": "unknown",
         }
 
-        return mapping.get(
-            emotion,
-            "unknown",
-        )
+        return mapping.get(emotion, "unknown")

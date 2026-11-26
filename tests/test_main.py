@@ -9,5 +9,5 @@ def test_main_window(qtbot):
     qtbot.addWidget(window)
 
     assert window.windowTitle() == "Voicemo"
-    assert window.width() == 900
-    assert window.height() == 600
+    assert window.width() == 980
+    assert window.height() == 680

@@ -780,10 +780,31 @@ class MainWindow(QMainWindow):
     # ==================================================================
 
     def closeEvent(self, event) -> None:
+        # Stop audio capture
         if self._capture is not None:
-            self._capture.stop()
+            capture = self._capture
+            try:
+                capture.window_ready.disconnect(self._on_window)
+            except (RuntimeError, TypeError):
+                pass
+            capture.stop()
             self._capture = None
 
+        # Discard pending audio.
+        self._pending_window = None
+        
+        # Wait for the current analysis worker.
+        if (
+            self._live_worker is not None
+            and self._live_worker.isRunning()
+        ):
+            self._live_worker.wait()
+        
+        # Stop file analysis workers.
+        for worker in self._file_workers:
+            if worker.isRunning():
+                worker.wait()
+        
         self._emotion_engine.reset()
 
         self._mini.close()

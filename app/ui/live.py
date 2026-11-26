@@ -67,7 +67,7 @@ class LiveCapture(QThread):
         super().__init__()
         self.source = source
         self.window_seconds = float(window_seconds)
-        self._running = False
+        self._running = True
 
     @staticmethod
     def mic_available() -> bool:
@@ -91,12 +91,11 @@ class LiveCapture(QThread):
         except Exception:
             return False
 
-    def stop(self) -> None:
+    def stop(self) -> bool:
         self._running = False
-        self.wait(4000)
+        return self.wait(10000)  # wait up to 10 seconds for the thread to finish
 
     def run(self) -> None:
-        self._running = True
         try:
             if self.source == "system":
                 if sys.platform == "win32":

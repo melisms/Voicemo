@@ -49,6 +49,24 @@ Voicemo separates its desktop interface, audio capture, speech recognition, and 
 - **Emotion Layer:** `emotion2vec`-based audio emotion analysis.
 - **Testing Layer:** Automated tests using pytest and pytest-qt.
 
+## ⬇️ Download Voicemo
+
+Get started with Voicemo! Download the latest pre-built release for your operating system.
+
+<p align="center">
+  <a href="https://github.com/melisms/Voicemo/releases/latest">
+    <img src="https://img.shields.io/badge/Download-Voicemo-blue?style=for-the-badge&logo=github" alt="Download Voicemo"/>
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/melisms/Voicemo/releases">View all releases</a>
+  ·
+  <a href="#-getting-started">Install from source</a>
+</p>
+
+> **Note:** For pre-built applications, download the appropriate package from the latest release. For developers who want to run or modify the source code, follow the installation instructions below.
+
 ## 🚀 Getting Started
 
 ### Prerequisites
@@ -87,7 +105,7 @@ Install the project's dependencies:
 
 ```bash
 python -m pip install --upgrade pip
-pip install -r requirements.txt
+pip install -e ".[dev]"
 ```
 
 Run the application using the project's configured entry point.
